@@ -1,3 +1,7 @@
+Tool modded to work without the 3rd party addition used by the original auther.
+
+=========================================================
+#Original README.md
 # PeaceWalkerTools
 Pack/Unpack Tools for Metal Gear Solid : Peace Walker PSP
 
