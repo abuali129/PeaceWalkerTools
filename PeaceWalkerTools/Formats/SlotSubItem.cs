@@ -35,12 +35,14 @@ namespace PeaceWalkerTools
     {
         public static void Pack(string path)
         {
-            Debug.WriteLine(Path.GetFileName(path));
+            Console.WriteLine("SlotFile.Pack: " + Path.GetFileName(path));
 
             var list = SerializationHelper<List<SlotSubItem>>.Read(path);
 
             var output = path.RemoveExtension(1);
             var prefix = path.RemoveExtension(2);
+
+            Console.WriteLine("  " + list.Count + " sub-files to pack, writing to: " + Path.GetFileName(output));
 
             var offset = 0u;
             using (var writer = new BinaryWriter(File.Create(output)))
@@ -50,12 +52,19 @@ namespace PeaceWalkerTools
                 foreach (var item in list)
                 {
                     var fileName = string.Format("{0}_{1:X6}.{2}", prefix, item.Key & 0xFFFFFF, item.Extension);
-                    byte[] data;
 
-                    data = File.ReadAllBytes(fileName);
+                    if (!File.Exists(fileName))
+                    {
+                        throw new FileNotFoundException("Sub-file not found — it must be in the same folder as the .slot.xml: " + fileName);
+                    }
+
+                    byte[] data = File.ReadAllBytes(fileName);
 
                     item.Offset = offset;
                     item.Length = (uint)Math.Ceiling(data.Length / 16.0) * 16;
+
+                    Console.WriteLine("    [{0}] key={1:X8} offset={2:X6} rawSize={3} paddedSize={4}",
+                        item.Extension, item.Key, item.Offset, data.Length, item.Length);
 
                     if (data.Length != item.Length)
                     {
@@ -66,6 +75,7 @@ namespace PeaceWalkerTools
                     offset += item.Length;
                 }
 
+                Console.WriteLine("  Total data section: {0} bytes (0x{0:X})", offset);
 
                 writer.BaseStream.Position = 0;
                 writer.Write((int)(list.Count + 3));
@@ -81,19 +91,22 @@ namespace PeaceWalkerTools
 
                 writer.Write(0);
                 writer.Write(0);
+
+                Console.WriteLine("  Slot file written: {0} bytes total", 0x800 + offset);
             }
 
         }
 
         public static void Unpack(string path)
         {
-            Debug.WriteLine(path);
+            Console.WriteLine("SlotFile.Unpack: " + Path.GetFileName(path));
 
             using (var reader = new BinaryReader(File.OpenRead(path)))
             {
                 var count = reader.ReadInt32();
                 var unknown = reader.ReadInt32();
                 var length = reader.ReadInt32();
+                Console.WriteLine("  count={0} unknown={1:X8} dataSize={2} (0x{2:X})", count, (uint)unknown, length);
 
                 var list = new List<SlotSubItem>();
 
@@ -130,6 +143,7 @@ namespace PeaceWalkerTools
 
                 var prefix = path.RemoveExtension(1);
 
+                Console.WriteLine("  {0} sub-files:", list.Count);
                 foreach (var item in list)
                 {
                     reader.BaseStream.Position = item.Offset + 0x800;
@@ -137,7 +151,7 @@ namespace PeaceWalkerTools
 
                     var output = string.Format("{0}_{1:X6}.{2}", prefix, item.Key & 0xFFFFFF, item.Extension);
 
-                    Debug.WriteLine("- " + Path.GetFileName(output));
+                    Console.WriteLine("    [{0}] key={1:X8} offset={2:X6} size={3}", item.Extension, item.Key, item.Offset, item.Length);
                     File.WriteAllBytes(output, data);
                 }
 

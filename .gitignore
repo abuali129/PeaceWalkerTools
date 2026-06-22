@@ -51,3 +51,9 @@ Temporary Items
 .suo
 obj
 bin
+
+# Personal runtime config (local paths) + IDE/build extras
+*.ini
+.vs/
+*.user
+*.pdb

@@ -8,11 +8,23 @@ namespace PeaceWalkerTools
 {
     class SlotData
     {
-        public static void Unpack(string location)
+        public static void Unpack(string location, string outputFolder = null)
         {
             var keyPath = Path.Combine(location, "SLOT.KEY");
-            var dataPath = Path.Combine(location, "SLOT.DAT.original");
+            var dataPath = Path.Combine(location, "SLOT.DAT");
 
+            if (!File.Exists(dataPath))
+            {
+                Console.WriteLine("ERROR: SLOT.DAT not found in " + location);
+                return;
+            }
+
+            Console.WriteLine("Reading: " + dataPath);
+
+            if (outputFolder == null)
+                outputFolder = Path.Combine(location, "SLOT");
+
+            Directory.CreateDirectory(outputFolder);
 
             Hash hash;
             byte[] keys;
@@ -26,7 +38,6 @@ namespace PeaceWalkerTools
                 keys = reader.ReadBytes((int)reader.BaseStream.Length - 12);
                 hash = new Hash(hash0, hash1, hash2);
             }
-
 
             var lastEnd = 0u;
 
@@ -42,9 +53,6 @@ namespace PeaceWalkerTools
                     var end = (0x000FFFFF & rawEnd) << 0xB;
 
                     lastEnd = end;
-
-                    var remStart = rawStart >> 20;
-                    var remEnd = rawEnd >> 20;
 
                     Debug.WriteLine(string.Format("{0:X3} {1:X3} ", rawStart >> 20, rawEnd >> 20));
 
@@ -63,43 +71,54 @@ namespace PeaceWalkerTools
                     var unknown1 = BitConverter.ToInt32(raw, 0);
                     var unknown2 = BitConverter.ToInt32(raw, 4);
 
-                    if (unknown1 != 0x00100004)
-                    {
-
-                    }
-                    else if (unknown2 != 0)
-                    {
-                    }
-
                     var compressedSize = BitConverter.ToInt32(raw, 8);
                     var uncompressedSize = BitConverter.ToInt32(raw, 12);
 
                     var data = new byte[compressedSize];
                     Buffer.BlockCopy(raw, 16, data, 0, compressedSize);
 
-
                     var uncompressed = ZlibStream.UncompressBuffer(data);
 
                     var t5 = BitConverter.ToInt32(uncompressed, 0);
-                    var output = string.Format(@"SLOT\{0:X8}_{1:X8}.slot", start, itemHash);
+                    var outputPath = Path.Combine(outputFolder, string.Format("{0:X8}_{1:X8}.slot", start, itemHash));
 
-                    if (Directory.Exists("SLOT") == false)
-                    {
-                        Directory.CreateDirectory("SLOT");
-                    }
-                    File.WriteAllBytes(output, uncompressed);
+                    File.WriteAllBytes(outputPath, uncompressed);
 
                     Console.WriteLine("{0:X8} {1:X8} {2:X8} {3:X8} {4:X8} {5:X8}", itemHash, unknown1, unknown2, compressedSize, uncompressedSize, t5);
                 }
             }
         }
 
-        public static void Pack(string location, string[] filter)
+        /// <summary>
+        /// Patch one or more .slot files back into SLOT.DAT.
+        /// location     = folder containing SLOT.DAT and SLOT.KEY (e.g. USRDIR)
+        /// slotFolder   = folder containing the .slot files (default: location\SLOT)
+        /// filter       = filenames to patch (e.g. "0B0D7800_A4FA3560.slot").
+        ///                Pass null or empty to patch every slot file that exists on disk.
+        /// </summary>
+        public static void Pack(string location, string[] filter = null, string slotFolder = null)
         {
-            var keyPath = Path.Combine(location, "SLOT.KEY");
-            var dataPath = Path.Combine(location, "SLOT.DAT");
+            var keyPath      = Path.Combine(location, "SLOT.KEY");
+            var dataPath     = Path.Combine(location, "SLOT.DAT");
+            var originalPath = Path.Combine(location, "SLOT.DAT.original");
 
-            File.Copy(Path.Combine(location, "SLOT.DAT.original"), Path.Combine(location, "SLOT.DAT"), true);
+            if (slotFolder == null)
+                slotFolder = Path.Combine(location, "SLOT");
+
+            Console.WriteLine("Pack: location  = " + location);
+            Console.WriteLine("Pack: slotFolder = " + slotFolder);
+            Console.WriteLine("Pack: filter     = " + (filter == null ? "<all>" : string.Join(", ", filter)));
+
+            // Create a backup of the original SLOT.DAT the first time
+            if (!File.Exists(originalPath))
+            {
+                Console.WriteLine("Creating backup: SLOT.DAT.original");
+                File.Copy(dataPath, originalPath);
+            }
+
+            // Always start from the clean original so we never corrupt on repeated runs
+            File.Copy(originalPath, dataPath, overwrite: true);
+            Console.WriteLine("Restored SLOT.DAT from backup.");
 
             Hash hash;
             byte[] rawKeys;
@@ -114,21 +133,12 @@ namespace PeaceWalkerTools
                 hash = new Hash(hash0, hash1, hash2);
             }
 
-            if (!Directory.Exists("SLOT"))
-            {
-                Directory.CreateDirectory("SLOT");
-            }
+            // Build filter set (by filename only, case-insensitive)
+            var filterSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (filter != null)
+                foreach (var f in filter)
+                    filterSet.Add(Path.GetFileName(f));
 
-            HashSet<string> filterSet;
-
-            if (filter == null)
-            {
-                filterSet = new HashSet<string>();
-            }
-            else
-            {
-                filterSet = new HashSet<string>(filter);
-            }
             var items = new List<SlotItemInfo>();
 
             using (var keyReader = new BinaryReader(new MemoryStream(rawKeys)))
@@ -136,42 +146,55 @@ namespace PeaceWalkerTools
                 while (keyReader.BaseStream.Position < keyReader.BaseStream.Length)
                 {
                     var rawStart = keyReader.ReadUInt32();
-                    var rawEnd = keyReader.ReadUInt32();
+                    var rawEnd   = keyReader.ReadUInt32();
 
                     var start = (0x000FFFFF & rawStart) << 0xB;
-                    var end = (0x000FFFFF & rawEnd) << 0xB;
+                    var end   = (0x000FFFFF & rawEnd)   << 0xB;
 
                     items.Add(new SlotItemInfo
                     {
                         Start = start,
-                        End = end,
-                        Hash = keyReader.ReadInt32()
+                        End   = end,
+                        Hash  = keyReader.ReadInt32()
                     });
                 }
             }
 
-            var current = 0;
+            var patched = 0;
+
+            Console.WriteLine("SLOT.KEY has " + items.Count + " entries.");
 
             using (var writer = new BinaryWriter(File.OpenWrite(dataPath)))
             {
                 foreach (var item in items)
                 {
-                    current++;
-                    var sourcePath = string.Format(@"SLOT\{0:X8}_{1:X8}.slot", item.Start, item.Hash);
-                    if (!filterSet.Contains(sourcePath))
+                    var fileName   = string.Format("{0:X8}_{1:X8}.slot", item.Start, item.Hash);
+                    var sourcePath = Path.Combine(slotFolder, fileName);
+
+                    // Skip if not in filter (when a filter was given)
+                    if (filterSet.Count > 0 && !filterSet.Contains(fileName))
+                        continue;
+
+                    Console.WriteLine("Matched filter: " + fileName);
+
+                    // Skip if the file simply doesn't exist on disk
+                    if (!File.Exists(sourcePath))
                     {
+                        Console.WriteLine("  NOT FOUND on disk: " + sourcePath);
                         continue;
                     }
-                    Debug.WriteLine(string.Format("Process {0:X8} ({1}/{2})", item.Start, current, items.Count));
 
+                    Console.WriteLine("  Found: " + sourcePath);
                     var data = File.ReadAllBytes(sourcePath);
+                    Console.WriteLine("  Uncompressed size: " + data.Length + " bytes");
 
                     byte[] compressed;
-                    if (Compress(data, (int)item.Length - 16, out compressed) == false)
+                    if (!Compress(data, (int)item.Length - 16, out compressed))
                     {
-                        Debug.WriteLine("Failed to compress!");
+                        Console.WriteLine("WARNING: Could not compress " + fileName + " to fit in " + (item.Length - 16) + " bytes — skipped.");
                         continue;
                     }
+                    Console.WriteLine("  Compressed size: " + compressed.Length + " / max " + (item.Length - 16));
 
                     var raw = new byte[item.Length];
 
@@ -181,7 +204,6 @@ namespace PeaceWalkerTools
                         rawWriter.Write(0x00000000);
                         rawWriter.Write(compressed.Length);
                         rawWriter.Write(data.Length);
-
                         rawWriter.Write(compressed);
                         rawWriter.Flush();
                     }
@@ -190,8 +212,13 @@ namespace PeaceWalkerTools
                     DecryptionUtility.Decrypt(raw, ref hashCopy);
                     writer.BaseStream.Position = item.Start;
                     writer.Write(raw);
+
+                    Console.WriteLine("Patched: " + fileName);
+                    patched++;
                 }
             }
+
+            Console.WriteLine(string.Format("Done. {0} slot(s) patched into SLOT.DAT", patched));
         }
 
         private static bool Compress(byte[] data, int max, out byte[] compressed)

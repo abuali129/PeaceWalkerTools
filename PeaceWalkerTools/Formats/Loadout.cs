@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Infragistics.Documents.Excel;
+using ClosedXML.Excel;
 
 namespace PeaceWalkerTools
 {
@@ -89,20 +89,21 @@ namespace PeaceWalkerTools
         {
             var cr = new string(new char[] { (char)0x0d, });
 
-            var sheet = Workbook.Load(excelPath).Worksheets.First();
+            using var wb = new XLWorkbook(excelPath);
+            var sheet = wb.Worksheets.First();
 
-            var rowIndex = 1;
+            var rowIndex = 2;
 
             while (true)
             {
-                var row = sheet.Rows[rowIndex++];
+                var row = sheet.Row(rowIndex++);
 
-                if (row.Cells[0].Value == null)
+                if (row.Cell(1).Value.IsBlank)
                 { break; }
 
-                var key = (int)Convert.ToDouble(row.Cells[0].Value);
+                var key = (int)row.Cell(1).GetValue<double>();
 
-                var text = row.Cells[2].GetText().Replace(cr, string.Empty);
+                var text = row.Cell(3).GetText().Replace(cr, string.Empty);
                 if (text.EndsWith(" "))
                 {
                     text = text.TrimEnd();
@@ -147,25 +148,24 @@ namespace PeaceWalkerTools
 
         private static void CreateWorkbook(string path, List<ItemEntity> textEntities)
         {
-            var workbook = new Workbook(WorkbookFormat.Excel2007);
+            using var workbook = new XLWorkbook();
             var sheet = workbook.Worksheets.Add("Sheet");
 
-            sheet.Columns[1].SetWidth(500, WorksheetColumnWidthUnit.Pixel);
-            sheet.Columns[1].CellFormat.WrapText = ExcelDefaultableBoolean.True;
-            sheet.Columns[2].SetWidth(500, WorksheetColumnWidthUnit.Pixel);
-            sheet.Columns[2].CellFormat.WrapText = ExcelDefaultableBoolean.True;
+            sheet.Column(2).Width = 71.4;
+            sheet.Column(2).Style.Alignment.WrapText = true;
+            sheet.Column(3).Width = 71.4;
+            sheet.Column(3).Style.Alignment.WrapText = true;
 
-
-            var rowIndex = 1;
+            var rowIndex = 2;
 
             foreach (var item in textEntities)
             {
-                var row = sheet.Rows[rowIndex++];
-                row.Cells[0].Value = item.Offset;
-                row.Cells[1].Value = item.Text;
+                var row = sheet.Row(rowIndex++);
+                row.Cell(1).Value = item.Offset;
+                row.Cell(2).Value = item.Text;
             }
 
-            workbook.Save(path);
+            workbook.SaveAs(path);
         }
 
         private static void Update(string path, byte[] data, Dictionary<int, ItemEntity> map, SectionParameters section)

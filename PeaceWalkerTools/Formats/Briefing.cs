@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Infragistics.Documents.Excel;
+using ClosedXML.Excel;
 
 namespace PeaceWalkerTools
 {
@@ -56,18 +56,11 @@ namespace PeaceWalkerTools
                 buffer.Clear();
             }
 
-
-
-            //var workbook = new Workbook(WorkbookFormat.Excel2007);
-            //var sheet = workbook.Worksheets.Add("Sheet");
-            //sheet.Columns[1].SetWidth(240, WorksheetColumnWidthUnit.Pixel);
-            //sheet.Columns[1].CellFormat.WrapText = ExcelDefaultableBoolean.True;
-
-            var workbook = Workbook.Load(Path.Combine(location, "Briefing.xlsx"));
+            using var workbook = new XLWorkbook(Path.Combine(location, "Briefing.xlsx"));
             var sheet = workbook.Worksheets.First();
 
             var setIndex = 0;
-            var rowIndex = 1;
+            var rowIndex = 2;
 
             foreach (var item in section)
             {
@@ -75,17 +68,16 @@ namespace PeaceWalkerTools
 
                 foreach (var entity in set.Entities)
                 {
+                    var row = sheet.Row(rowIndex++);
 
-                    var row = sheet.Rows[rowIndex++];
-
-                    row.Cells[0].Value = setIndex;
-                    row.Cells[1].Value = entity.Text.Trim();
+                    row.Cell(1).Value = setIndex;
+                    row.Cell(2).Value = entity.Text.Trim();
                 }
 
                 setIndex++;
             }
 
-            workbook.Save(Path.Combine(location, "Briefing.xlsx"));
+            workbook.SaveAs(Path.Combine(location, "Briefing.xlsx"));
         }
 
 
@@ -154,8 +146,8 @@ namespace PeaceWalkerTools
                     for (int i = 0; i < set.Entities.Count; i++)
                     {
                         set.Entities[i].Offset = (int)(fs.Position - set.TextSectionStart);
-                        var raw = Encoding.UTF8.GetBytes(korean[i]);
-                        fs.Write(raw, 0, raw.Length);
+                        var rawBytes = Encoding.UTF8.GetBytes(korean[i]);
+                        fs.Write(rawBytes, 0, rawBytes.Length);
                         fs.WriteByte(0);
                     }
 
@@ -185,28 +177,28 @@ namespace PeaceWalkerTools
         {
             var koreanSet = new Dictionary<int, List<string>>();
 
-            var rowIndex = 1;
+            var rowIndex = 2;
 
-            var sheet = Workbook.Load(path).Worksheets.FirstOrDefault();
+            using var wb = new XLWorkbook(path);
+            var sheet = wb.Worksheets.FirstOrDefault();
 
             while (true)
             {
-                var row = sheet.Rows[rowIndex++];
-                if (row.Cells[0].Value == null)
+                var row = sheet.Row(rowIndex++);
+                if (row.Cell(1).Value.IsBlank)
                 {
                     break;
                 }
 
                 List<string> list;
-                var setIndex = (int)(double)row.Cells[0].Value;
+                var setIndex = (int)row.Cell(1).GetValue<double>();
                 if (!koreanSet.TryGetValue(setIndex, out list))
                 {
                     list = new List<string>();
                     koreanSet[setIndex] = list;
                 }
 
-                var cell = row.Cells[2];
-                var value = cell.Value;
+                var cell = row.Cell(3);
 
                 list.Add(cell.GetText()?.ReplaceWideCharacters());
             }
@@ -316,25 +308,25 @@ namespace PeaceWalkerTools
 
             for (int i = 0; i < set.Entities.Count; i++)
             {
-                var offset = set.Entities[i].Offset + set.TextSectionStart;
-                fs.Position = offset;
+                var off = set.Entities[i].Offset + set.TextSectionStart;
+                fs.Position = off;
 
                 set.Entities[i].Key = fs.ReadInt32();
                 switch (set.Entities[i].Key & 0xFF)
                 {
                     case 0x01:
-                    offset += 5;
+                    off += 5;
                     break;
                     case 0x02:
-                    offset += 4;
+                    off += 4;
                     break;
                     default:
-                    offset += 3;
+                    off += 3;
                     break;
 
                 }
 
-                set.Entities[i].Text = fs.ReadString(offset, encoding);
+                set.Entities[i].Text = fs.ReadString(off, encoding);
             }
 
             if (set.Entities.Count > 0)

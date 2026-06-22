@@ -1,7 +1,7 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Infragistics.Documents.Excel;
+using ClosedXML.Excel;
 
 namespace PeaceWalkerTools
 {
@@ -9,56 +9,47 @@ namespace PeaceWalkerTools
     {
         public static void ExportToExcel()
         {
-            var workbook = new Workbook(WorkbookFormat.Excel2007);
+            using var workbook = new XLWorkbook();
             foreach (var path in Directory.GetFiles("ypk", "*.ypk"))
             {
-                var location = Path.GetDirectoryName(path);
                 var sheet = workbook.Worksheets.Add(Path.GetFileNameWithoutExtension(path));
 
                 var ypk = YPK.Read(path);
 
                 var index = 0;
-                var rowIndex = 1;
+                var rowIndex = 2;
 
-                sheet.Rows[0].Cells[0].Value = "Index";
-                sheet.Rows[0].Cells[1].Value = "SyncStart";
-                sheet.Rows[0].Cells[2].Value = "SyncEnd";
-                sheet.Rows[0].Cells[3].Value = "Unknown";
-                sheet.Rows[0].Cells[4].Value = "Japanese";
-                sheet.Rows[0].Cells[5].Value = "Korean";
+                sheet.Row(1).Cell(1).Value = "Index";
+                sheet.Row(1).Cell(2).Value = "SyncStart";
+                sheet.Row(1).Cell(3).Value = "SyncEnd";
+                sheet.Row(1).Cell(4).Value = "Unknown";
+                sheet.Row(1).Cell(5).Value = "Japanese";
+                sheet.Row(1).Cell(6).Value = "Korean";
 
-                sheet.Columns[4].SetWidth(420, WorksheetColumnWidthUnit.Pixel);
-                sheet.Columns[5].SetWidth(420, WorksheetColumnWidthUnit.Pixel);
+                sheet.Column(5).Width = 60;
+                sheet.Column(6).Width = 60;
 
                 foreach (var entity in ypk.Entities)
                 {
                     foreach (var line in entity.Lines)
                     {
-                        var row = sheet.Rows[rowIndex++];
-                        row.Cells[0].Value = index;
-                        row.Cells[1].Value = line.SyncStart;
-                        row.Cells[2].Value = line.SyncEnd;
-                        row.Cells[3].Value = line.Unknown;
-                        row.Cells[4].Value = line.Text;
+                        var row = sheet.Row(rowIndex++);
+                        row.Cell(1).Value = index;
+                        row.Cell(2).Value = line.SyncStart;
+                        row.Cell(3).Value = line.SyncEnd;
+                        row.Cell(4).Value = line.Unknown;
+                        row.Cell(5).Value = line.Text;
                     }
 
                     index++;
                 }
-                //var fileName = Path.GetFileName(path);
-                //var export = Path.Combine(location, "xml", string.Format("{0}.xml", fileName));
-                //SerializationHelper.Save(ypk, export);
-
-                //ypk = SerializationHelper<YPK>.Read(export);
-                //ypk.Write(Path.Combine(location, "New", fileName));
-
-
             }
-            workbook.Save("ypk.xlsx");
+            workbook.SaveAs("ypk.xlsx");
         }
 
         public static void ReplaceText(string sourcePath, string location)
         {
-            var workbook = Workbook.Load(sourcePath);
+            using var workbook = new XLWorkbook(sourcePath);
 
             var sheetMap = workbook.Worksheets.ToDictionary(x => x.Name, x => GetTextList(x));
 
@@ -82,16 +73,13 @@ namespace PeaceWalkerTools
                     }
                 }
 
-
                 olang.Write(file);
             }
         }
 
-
-
-        private static List<string> GetTextList(Worksheet sheet)
+        private static List<string> GetTextList(IXLWorksheet sheet)
         {
-            return sheet.Rows.Skip(1).Select(x => x.Cells[5].GetText()).ToList();
+            return sheet.RowsUsed().Skip(1).Select(x => x.Cell(6).GetText()).ToList();
         }
     }
 }
