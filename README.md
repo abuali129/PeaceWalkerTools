@@ -1,5 +1,19 @@
 Tool modded to work without the 3rd party addition used by the original auther.
 
+PeaceWalkerTools - drag a file onto the exe, or pass paths as arguments.
+Support PS3 & PSP version 
+```
+Supported files:
+  *.dar              Unpack DAR archive  → <name>_dar\  +  <name>.dar.inf
+  *.qar              Unpack QAR archive  → <name>_qar\  +  <name>.qar.inf
+  *.txp              Extract TXP textures → PNG files next to the .txp
+  *.dar.inf          Repack DAR from manifest
+  *.qar.inf          Repack QAR from manifest
+  STAGEDAT.PDT       Decrypt & extract all stage files → STAGEDAT_pdt\
+  SLOT.DAT           Decrypt & extract all slot files  → SLOT\  (needs SLOT.KEY in same folder)
+  *.slot             Unpack a single .slot file → individual sub-files + .slot.xml manifest
+  *.slot.xml         Repack .slot from manifest, then patch back into SLOT.DAT
+```
 =========================================================
 #Original README.md
 # PeaceWalkerTools
