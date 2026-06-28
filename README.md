@@ -2,6 +2,8 @@ Tool modded to work without the 3rd party addition used by the original auther.
 
 PeaceWalkerTools - drag a file onto the exe, or pass paths as arguments.
 Support PS3 & PSP version, but for PS3 SLOT.DAT you have to use *(https://github.com/abuali129/Chrysalis-1.3)*
+
+**.NET 7.0 Runtime** **(https://dotnet.microsoft.com/en-us/download/dotnet/thank-you/runtime-7.0.20-windows-x64-installer?cid=getdotnetcore)** is needed to run the tool
 ```
 Supported files:
   *.dar              Unpack DAR archive  → <name>_dar\  +  <name>.dar.inf
